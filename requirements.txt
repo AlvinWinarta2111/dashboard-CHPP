@@ -2,5 +2,4 @@ streamlit
 pandas
 plotly
 openpyxl
-streamlit-aggrid
-aggrid
+st-aggrid
