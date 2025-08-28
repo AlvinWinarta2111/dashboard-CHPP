@@ -3,32 +3,21 @@ import pandas as pd
 import plotly.express as px
 
 # =========================
-# Flexible score mappings
+# Helper functions (for styling and status mapping)
 # =========================
-SCORE_MAPPINGS = {
-    "VIBRATION": {"acceptable": 3, "excellent": 3, "ok": 3,
-                  "requires evaluation": 2, "unacceptable": 1, "not applicable": None},
-    "OIL ANALYSIS": {"no action required": 3, "ok": 3,
-                     "monitor compartment": 2, "need action": 2,
-                     "urgent action required": 1, "not applicable": None},
-    "TEMPERATURE": {"good": 3, "warning": 2, "unacceptable": 1, "not applicable": None},
-    "OTHER INSPECTION": {"good": 3, "alert": 2, "need action": 1, "not applicable": None}
-}
 
-# =========================
-# Helper functions
-# =========================
-def map_score(value, category):
-    if pd.isna(value):
-        return None
-    return SCORE_MAPPINGS[category].get(str(value).strip().lower(), None)
-
-def aggregate_score(row):
-    subs = [row["VIBRATION_SCORE"], row["OIL_SCORE"], row["TEMP_SCORE"], row["OTHER_SCORE"]]
-    subs = [s for s in subs if s is not None]
-    return min(subs) if subs else None
+def map_status(score):
+    """Converts a numeric score (1, 2, 3) to a text status."""
+    if score == 1:
+        return "RED"
+    elif score == 2:
+        return "AMBER"
+    elif score == 3:
+        return "GREEN"
+    return "UNKNOWN"
 
 def color_score(val):
+    """Applies background color to a cell based on its numeric score."""
     if val == 1:
         return "background-color: red; color: white;"
     elif val == 2:
@@ -37,10 +26,21 @@ def color_score(val):
         return "background-color: green; color: white;"
     return ""
 
+def color_status(val):
+    """Applies background color to a cell based on its text status."""
+    if val == "RED":
+        return "background-color: red; color: white;"
+    elif val == "AMBER":
+        return "background-color: orange; color: black;"
+    elif val == "GREEN":
+        return "background-color: green; color: white;"
+    return ""
+
 # =========================
 # Main Streamlit App
 # =========================
 def main():
+    st.set_page_config(layout="wide")
     st.title("📊 Condition Monitoring Dashboard")
 
     uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx"])
@@ -48,166 +48,149 @@ def main():
         st.info("Please upload a file to continue.")
         return
 
-    # Load data
+    # Load data from the "Scorecard" sheet
     try:
         df = pd.read_excel(uploaded_file, sheet_name="Scorecard", header=1)
     except Exception as e:
-        st.error(f"Error reading file: {e}")
+        st.error(f"Error reading the 'Scorecard' sheet in the file: {e}")
         return
 
-    # Rename columns
-    column_mapping = {
-        "AREA": "AREA", "SYSTEM": "SYSTEM", "EQUIPMENT DESCRIPTION": "EQUIPMENT DESCRIPTION",
-        "DATE": "DATE", "CONDITION MONITORING SCORE": "CONDITION MONITORING SCORE",
-        "VIBRATION": "VIBRATION", "OIL ANALYSIS": "OIL ANALYSIS",
-        "TEMPERATURE": "TEMPERATURE", "OTHER INSPECTION": "OTHER INSPECTION"
-    }
-    df = df.rename(columns=column_mapping)
+    # Clean up column names
+    df.columns = [col.strip().upper() for col in df.columns]
 
-    # Parse date
-    df["DATE"] = pd.to_datetime(df["DATE"], dayfirst=True, errors="coerce")
+    # --- DIRECTLY USE THE SCORE FROM EXCEL ---
+    # Rename the score column for easier use and ensure it's a numeric type
+    if "CONDITION MONITORING SCORE" not in df.columns:
+        st.error("Error: A column named 'CONDITION MONITORING SCORE' was not found in your file.")
+        return
+        
+    df = df.rename(columns={"CONDITION MONITORING SCORE": "SCORE"})
+    
+    # Convert score to a number, coercing errors to 'Not a Number' (NaN)
+    df["SCORE"] = pd.to_numeric(df["SCORE"], errors='coerce')
 
-    # Map scores
-    df["VIBRATION_SCORE"] = df["VIBRATION"].apply(lambda x: map_score(x, "VIBRATION"))
-    df["OIL_SCORE"] = df["OIL ANALYSIS"].apply(lambda x: map_score(x, "OIL ANALYSIS"))
-    df["TEMP_SCORE"] = df["TEMPERATURE"].apply(lambda x: map_score(x, "TEMPERATURE"))
-    df["OTHER_SCORE"] = df["OTHER INSPECTION"].apply(lambda x: map_score(x, "OTHER INSPECTION"))
+    # Parse date and drop rows with invalid dates or scores
+    df["DATE"] = pd.to_datetime(df["DATE"], errors='coerce')
+    df.dropna(subset=['AREA', 'SYSTEM', 'EQUIPMENT DESCRIPTION', 'DATE', 'SCORE'], inplace=True)
+    
+    # Convert score to integer
+    df["SCORE"] = df["SCORE"].astype(int)
 
-    # Aggregate equipment score
-    df["CALCULATED_SCORE"] = df.apply(aggregate_score, axis=1)
+    # Create the text-based status column for the pie charts
+    df["EQUIP_STATUS"] = df["SCORE"].apply(map_status)
 
-    # Date filter
-    min_date, max_date = df["DATE"].min(), df["DATE"].max()
+    # --- FILTERS ---
+    min_date, max_date = df["DATE"].min().date(), df["DATE"].max().date()
     date_range = st.date_input("Select Date Range", [min_date, max_date])
     if len(date_range) == 2:
-        df = df[(df["DATE"] >= pd.to_datetime(date_range[0])) &
-                (df["DATE"] <= pd.to_datetime(date_range[1]))]
+        df = df[(df["DATE"].dt.date >= date_range[0]) & (df["DATE"].dt.date <= date_range[1])]
 
-    # Hierarchical aggregation for tables
-    system_scores = df.groupby(["AREA", "SYSTEM"])["CALCULATED_SCORE"].min().reset_index()
-    area_scores = system_scores.groupby("AREA")["CALCULATED_SCORE"].min().reset_index()
+    if df.empty:
+        st.warning("No data available for the selected date range.")
+        return
 
-    # Replace NaN with 0
-    area_scores["CALCULATED_SCORE"] = area_scores["CALCULATED_SCORE"].fillna(0).astype(int)
-    system_scores["CALCULATED_SCORE"] = system_scores["CALCULATED_SCORE"].fillna(0).astype(int)
+    # --- HIERARCHICAL AGGREGATION (using the score from Excel) ---
+    system_scores = df.groupby(["AREA", "SYSTEM"])["SCORE"].min().reset_index()
+    area_scores = system_scores.groupby("AREA")["SCORE"].min().reset_index()
 
     # ======================
-    # 📊 BAR CHARTS (Minimum Score)
+    # 📊 BAR CHARTS
     # ======================
     st.subheader("AREA Score Distribution")
     fig_area = px.bar(
-        area_scores,
-        x="AREA",
-        y="CALCULATED_SCORE",
-        color=area_scores["CALCULATED_SCORE"].astype(str),
-        text="CALCULATED_SCORE",
+        area_scores, x="AREA", y="SCORE",
+        color=area_scores["SCORE"].astype(str),
+        text="SCORE",
         color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
-        title="Score per AREA",
-        opacity=1
+        title="Lowest Score per AREA"
     )
-    fig_area.update_traces(texttemplate="%{text}", textposition="outside")
-    fig_area.update_layout(
-        yaxis=dict(title="Score", range=[0, 3], dtick=1),
-        xaxis=dict(title="Area", tickangle=-45),
-        width=900,
-        margin=dict(b=150)
-    )
-    st.plotly_chart(fig_area)
+    fig_area.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1))
+    st.plotly_chart(fig_area, use_container_width=True)
 
     st.subheader("SYSTEM Score Distribution")
     fig_system = px.bar(
-        system_scores,
-        x="SYSTEM",
-        y="CALCULATED_SCORE",
-        color=system_scores["CALCULATED_SCORE"].astype(str),
-        text="CALCULATED_SCORE",
+        system_scores, x="SYSTEM", y="SCORE",
+        color=system_scores["SCORE"].astype(str),
+        text="SCORE",
         color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
-        title="Score per SYSTEM",
-        opacity=1
+        title="Lowest Score per SYSTEM"
     )
-    fig_system.update_traces(texttemplate="%{text}", textposition="outside")
-    fig_system.update_layout(
-        yaxis=dict(title="Score", range=[0, 3], dtick=1),
-        xaxis=dict(title="System", tickangle=-45),
-        width=1200,
-        margin=dict(b=250)
-    )
-    st.plotly_chart(fig_system)
+    fig_system.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1), xaxis=dict(tickangle=-45))
+    st.plotly_chart(fig_system, use_container_width=True)
 
     # ======================
-    # 📍 TABLES WITH COLORS
+    # 🥧 PIE CHARTS
     # ======================
-    st.subheader("Area Status")
-    st.dataframe(area_scores.style.applymap(color_score, subset=["CALCULATED_SCORE"]))
+    st.subheader("Equipment Status Distribution per AREA")
+    area_dist = df.groupby(["AREA", "EQUIP_STATUS"])["EQUIPMENT DESCRIPTION"].count().reset_index(name="COUNT")
+    areas = sorted(area_dist["AREA"].unique())
 
-    st.subheader("System Status")
-    st.dataframe(system_scores.style.applymap(color_score, subset=["CALCULATED_SCORE"]))
-
+    cols_per_row = 3
+    for i in range(0, len(areas), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, area in enumerate(areas[i:i+cols_per_row]):
+            if j < len(cols):
+                with cols[j]:
+                    st.markdown(f"**{area}**")
+                    area_data = area_dist[area_dist["AREA"] == area]
+                    fig = px.pie(
+                        area_data, names="EQUIP_STATUS", values="COUNT",
+                        color="EQUIP_STATUS",
+                        color_discrete_map={"RED": "red", "AMBER": "orange", "GREEN": "green"},
+                        hole=0.4
+                    )
+                    fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20))
+                    st.plotly_chart(fig, use_container_width=True)
+    
     # ======================
-    # 🔎 INTERACTIVE SYSTEM → EQUIPMENT
+    # 📍 TABLES
+    # ======================
+    st.subheader("Area Status (Lowest Score)")
+    st.dataframe(area_scores.style.applymap(color_score, subset=["SCORE"]), use_container_width=True)
+
+    st.subheader("System Status (Lowest Score)")
+    system_scores["STATUS"] = system_scores["SCORE"].apply(map_status)
+    st.dataframe(system_scores.style.applymap(color_status, subset=["STATUS"]), use_container_width=True)
+    
+    # ======================
+    # 🔎 INTERACTIVE EXPLORER
     # ======================
     st.subheader("Explore Equipment by System")
     selected_system = st.selectbox("Select a System:", sorted(df["SYSTEM"].unique()))
-    filtered_df = df[df["SYSTEM"] == selected_system]
-
-    # Remove decimals for display
-    filtered_df_display = filtered_df.copy()
-    filtered_df_display["CALCULATED_SCORE"] = filtered_df_display["CALCULATED_SCORE"].fillna(0).astype(int)
-
-    st.dataframe(filtered_df_display[[
-        "AREA", "SYSTEM", "EQUIPMENT DESCRIPTION", "DATE",
-        "VIBRATION", "OIL ANALYSIS", "TEMPERATURE", "OTHER INSPECTION",
-        "CALCULATED_SCORE"
-    ]].style.applymap(color_score, subset=["CALCULATED_SCORE"]))
+    if selected_system:
+        filtered_df = df[df["SYSTEM"] == selected_system]
+        
+        display_cols = [
+            "AREA", "SYSTEM", "EQUIPMENT DESCRIPTION", "DATE", "SCORE",
+            "VIBRATION", "OIL ANALYSIS", "TEMPERATURE", "OTHER INSPECTION",
+            "FINDING", "ACTION PLAN"
+        ]
+        # Ensure only existing columns are displayed
+        display_cols = [col for col in display_cols if col in filtered_df.columns]
+        
+        st.dataframe(
+            filtered_df[display_cols].style.applymap(color_score, subset=["SCORE"]),
+            use_container_width=True
+        )
 
     # ======================
-    # 🔎 INTERACTIVE EQUIPMENT → FINDING & ACTION PLAN
-    # ======================
-    st.subheader("Explore Finding & Action Plan by Equipment Score")
-    selected_equipment = st.selectbox(
-        "Select an Equipment:",
-        sorted(filtered_df["EQUIPMENT DESCRIPTION"].unique())
-    )
-    equipment_details = filtered_df[filtered_df["EQUIPMENT DESCRIPTION"] == selected_equipment]
-
-    # Text wrap for FINDING and ACTION PLAN
-    styled_df = equipment_details[[
-        "AREA", "SYSTEM", "EQUIPMENT DESCRIPTION",
-        "FINDING", "ACTION PLAN"
-    ]].style.set_properties(**{
-        'white-space': 'normal',
-        'text-align': 'left'
-    })
-
-    st.dataframe(styled_df)
-    # ======================
-    # 📈 PERFORMANCE TREND OVER TIME
+    # 📈 PERFORMANCE TREND
     # ======================
     st.subheader("System Performance Trend Over Time")
+    trend_df = df.groupby(['DATE', 'SYSTEM'])['SCORE'].min().reset_index()
+    
+    trend_systems = sorted(df["SYSTEM"].unique())
+    if trend_systems:
+        selected_system_trend = st.selectbox("Select System for Trend Line:", trend_systems)
+        trend_df_filtered = trend_df[trend_df["SYSTEM"] == selected_system_trend]
 
-    # Aggregate minimum CALCULATED_SCORE per system per date
-    trend_df = df.groupby(['DATE', 'SYSTEM'])['CALCULATED_SCORE'].min().reset_index()
+        fig_trend = px.line(
+            trend_df_filtered, x="DATE", y="SCORE", markers=True,
+            title=f"Performance Trend for {selected_system_trend}"
+        )
+        fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1))
+        st.plotly_chart(fig_trend, use_container_width=True)
 
-    # Optional: filter by system for clarity
-    selected_system_trend = st.selectbox("Select System for Trend Line:", sorted(df["SYSTEM"].unique()))
-    trend_df_filtered = trend_df[trend_df["SYSTEM"] == selected_system_trend]
-
-    # Plot trend line
-    fig_trend = px.line(
-        trend_df_filtered,
-        x="DATE",
-        y="CALCULATED_SCORE",
-        markers=True,
-        title=f"Performance Trend for {selected_system_trend}",
-        line_shape='linear'
-    )
-    fig_trend.update_layout(
-        yaxis=dict(title="Score", range=[0, 3], dtick=1),
-        xaxis=dict(title="Date"),
-        width=1200,
-        height=500
-    )
-    st.plotly_chart(fig_trend)
 
 if __name__ == "__main__":
     main()
