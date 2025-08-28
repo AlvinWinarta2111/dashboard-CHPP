@@ -80,15 +80,14 @@ def main():
     df["EQUIP_STATUS"] = df["SCORE"].apply(map_status)
 
     # --- FILTERS ---
-    # Date filter: single cutoff date (default = latest available)
     min_date, max_date = df["DATE"].min().date(), df["DATE"].max().date()
-    cutoff_date = st.date_input("Select Date", max_date, min_value=min_date, max_value=max_date)
+    date_range = st.date_input("Select Date Range", [min_date, max_date])
+    if len(date_range) == 2:
+        df = df[(df["DATE"].dt.date >= date_range[0]) & (df["DATE"].dt.date <= date_range[1])]
 
-    # Filter all records up to and including that date
-    df = df[df["DATE"].dt.date <= cutoff_date]
-
-    # Keep only the most recent record per equipment (up to cutoff date)
-    df = df.sort_values("DATE").groupby("EQUIPMENT DESCRIPTION", as_index=False).last()
+    if df.empty:
+        st.warning("No data available for the selected date range.")
+        return
 
 
     # --- HIERARCHICAL AGGREGATION (using the score from Excel) ---
@@ -257,3 +256,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
