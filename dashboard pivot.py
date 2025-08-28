@@ -82,7 +82,7 @@ def main():
     # --- FILTERS ---
     # Date filter: single cutoff date (default = latest available)
     min_date, max_date = df["DATE"].min().date(), df["DATE"].max().date()
-    cutoff_date = st.date_input("Select Snapshot Date", max_date, min_value=min_date, max_value=max_date)
+    cutoff_date = st.date_input("Select Date", max_date, min_value=min_date, max_value=max_date)
 
     # Filter all records up to and including that date
     df = df[df["DATE"].dt.date <= cutoff_date]
@@ -109,18 +109,7 @@ def main():
     fig_area.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1))
     st.plotly_chart(fig_area, use_container_width=True)
 
-    st.subheader("SYSTEM Score Distribution")
-    fig_system = px.bar(
-        system_scores, x="SYSTEM", y="SCORE",
-        color=system_scores["SCORE"].astype(str),
-        text="SCORE",
-        color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
-        title="Lowest Score per SYSTEM"
-    )
-    fig_system.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1), xaxis=dict(tickangle=-45))
-    st.plotly_chart(fig_system, use_container_width=True)
-
-    # ======================
+     # ======================
     # 🥧 PIE CHARTS
     # ======================
     st.subheader("Equipment Status Distribution per AREA")
@@ -144,6 +133,18 @@ def main():
                     fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20))
                     st.plotly_chart(fig, use_container_width=True)
     
+
+    st.subheader("SYSTEM Score Distribution")
+    fig_system = px.bar(
+        system_scores, x="SYSTEM", y="SCORE",
+        color=system_scores["SCORE"].astype(str),
+        text="SCORE",
+        color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
+        title="Lowest Score per SYSTEM"
+    )
+    fig_system.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1), xaxis=dict(tickangle=-45))
+    st.plotly_chart(fig_system, use_container_width=True)
+
     # ======================
     # 📍 TABLES
     # ======================
@@ -212,24 +213,27 @@ def main():
     )
 
     # ======================
-    # 🔎 INTERACTIVE EXPLORER
+    # 🔎 INTERACTIVE EXPLORER (UPDATED)
     # ======================
     st.subheader("Explore Equipment by System")
     selected_system = st.selectbox("Select a System:", sorted(df["SYSTEM"].unique()))
     if selected_system:
         filtered_df = df[df["SYSTEM"] == selected_system]
         
+        # --- NEW: Create a copy for display formatting ---
+        display_df = filtered_df.copy()
+        display_df["DATE"] = display_df["DATE"].dt.strftime('%d-%m-%Y')
+
         display_cols = [
             "AREA", "SYSTEM", "EQUIPMENT DESCRIPTION", "DATE", "SCORE",
             "VIBRATION", "OIL ANALYSIS", "TEMPERATURE", "OTHER INSPECTION",
             "FINDING", "ACTION PLAN"
         ]
         # Ensure only existing columns are displayed
-        display_cols = [col for col in display_cols if col in filtered_df.columns]
+        display_cols = [col for col in display_cols if col in display_df.columns]
         
         st.dataframe(
-            filtered_df[display_cols].style.applymap(color_score, subset=["SCORE"]),
-            use_container_width=True
+            display_df[display_cols].style.map(color_score, subset=["SCORE"]).hide(axis="index")
         )
 
     # ======================
