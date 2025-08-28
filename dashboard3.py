@@ -21,7 +21,7 @@ def color_score(val):
     if val == 1:
         return "background-color: red; color: white;"
     elif val == 2:
-        return "background-color: yellow; color: white;"
+        return "background-color: yellow; color: black;"
     elif val == 3:
         return "background-color: green; color: white;"
     return ""
@@ -31,7 +31,7 @@ def color_status(val):
     if val == "Need Action":
         return "background-color: red; color: white;"
     elif val == "Caution":
-        return "background-color: yellow; color: white;"
+        return "background-color: yellow; color: black;"
     elif val == "Okay":
         return "background-color: green; color: white;"
     return ""
