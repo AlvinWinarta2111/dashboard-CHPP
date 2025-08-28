@@ -9,11 +9,11 @@ import plotly.express as px
 def map_status(score):
     """Converts a numeric score (1, 2, 3) to a text status."""
     if score == 1:
-        return "RED"
+        return "Need Action"
     elif score == 2:
-        return "AMBER"
+        return "Caution"
     elif score == 3:
-        return "GREEN"
+        return "Okay"
     return "UNKNOWN"
 
 def color_score(val):
@@ -21,18 +21,18 @@ def color_score(val):
     if val == 1:
         return "background-color: red; color: white;"
     elif val == 2:
-        return "background-color: yellow; color: black;"
+        return "background-color: yellow; color: white;"
     elif val == 3:
         return "background-color: green; color: white;"
     return ""
 
 def color_status(val):
     """Applies background color to a cell based on its text status."""
-    if val == "RED":
+    if val == "Need Action":
         return "background-color: red; color: white;"
-    elif val == "AMBER":
-        return "background-color: orange; color: black;"
-    elif val == "GREEN":
+    elif val == "Caution":
+        return "background-color: yellow; color: white;"
+    elif val == "Okay":
         return "background-color: green; color: white;"
     return ""
 
@@ -136,7 +136,7 @@ def main():
                     fig = px.pie(
                         area_data, names="EQUIP_STATUS", values="COUNT",
                         color="EQUIP_STATUS",
-                        color_discrete_map={"RED": "red", "AMBER": "orange", "GREEN": "green"},
+                        color_discrete_map={"Need Action": "red", "Caution": "yellow", "Okay": "green"},
                         hole=0.4
                     )
                     fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20))
