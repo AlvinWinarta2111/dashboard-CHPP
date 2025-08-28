@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode, DataReturnMode
 
 # =========================
 # Helper functions (for styling and status mapping)
@@ -9,30 +10,36 @@ import plotly.express as px
 def map_status(score):
     """Converts a numeric score (1, 2, 3) to a text status."""
     if score == 1:
-        return "Need Action"
+        return "RED"
     elif score == 2:
-        return "Caution"
+        return "AMBER"
     elif score == 3:
-        return "Okay"
+        return "GREEN"
     return "UNKNOWN"
 
 def color_score(val):
-    """Applies background color to a cell based on its numeric score."""
-    if val == 1:
+    """Returns CSS style for SCORE cells (used in pandas Styler)."""
+    if pd.isna(val):
+        return ""
+    try:
+        v = int(val)
+    except Exception:
+        return ""
+    if v == 1:
         return "background-color: red; color: white;"
-    elif val == 2:
+    elif v == 2:
         return "background-color: yellow; color: black;"
-    elif val == 3:
+    elif v == 3:
         return "background-color: green; color: white;"
     return ""
 
 def color_status(val):
-    """Applies background color to a cell based on its text status."""
-    if val == "Need Action":
+    """Returns CSS style for STATUS cells (used in pandas Styler)."""
+    if val == "RED":
         return "background-color: red; color: white;"
-    elif val == "Caution":
-        return "background-color: yellow; color: black;"
-    elif val == "Okay":
+    elif val == "AMBER":
+        return "background-color: orange; color: black;"
+    elif val == "GREEN":
         return "background-color: green; color: white;"
     return ""
 
@@ -55,28 +62,27 @@ def main():
         st.error(f"Error reading the 'Scorecard' sheet in the file: {e}")
         return
 
-    # Clean up column names
+    # Normalize column names to UPPER
     df.columns = [col.strip().upper() for col in df.columns]
 
-    # --- DIRECTLY USE THE SCORE FROM EXCEL ---
-    # Rename the score column for easier use and ensure it's a numeric type
+    # Ensure required column exists
     if "CONDITION MONITORING SCORE" not in df.columns:
         st.error("Error: A column named 'CONDITION MONITORING SCORE' was not found in your file.")
         return
-        
-    df = df.rename(columns={"CONDITION MONITORING SCORE": "SCORE"})
-    
-    # Convert score to a number, coercing errors to 'Not a Number' (NaN)
-    df["SCORE"] = pd.to_numeric(df["SCORE"], errors='coerce')
 
-    # Parse date and drop rows with invalid dates or scores
-    df["DATE"] = pd.to_datetime(df["DATE"], errors='coerce')
-    df.dropna(subset=['AREA', 'SYSTEM', 'EQUIPMENT DESCRIPTION', 'DATE', 'SCORE'], inplace=True)
-    
-    # Convert score to integer
+    # Rename and coerce types
+    df = df.rename(columns={"CONDITION MONITORING SCORE": "SCORE"})
+    df["SCORE"] = pd.to_numeric(df["SCORE"], errors="coerce")
+    df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+
+    # Drop rows missing essential fields
+    required_subset = ['AREA', 'SYSTEM', 'EQUIPMENT DESCRIPTION', 'DATE', 'SCORE']
+    df.dropna(subset=required_subset, inplace=True)
+
+    # Convert SCORE to integer (safe now because we dropped NaNs)
     df["SCORE"] = df["SCORE"].astype(int)
 
-    # Create the text-based status column for the pie charts
+    # Create text status for pie charts
     df["EQUIP_STATUS"] = df["SCORE"].apply(map_status)
 
     # --- FILTERS ---
@@ -89,7 +95,7 @@ def main():
         st.warning("No data available for the selected date range.")
         return
 
-    # --- HIERARCHICAL AGGREGATION (using the score from Excel) ---
+    # --- Aggregation ---
     system_scores = df.groupby(["AREA", "SYSTEM"])["SCORE"].min().reset_index()
     area_scores = system_scores.groupby("AREA")["SCORE"].min().reset_index()
 
@@ -106,17 +112,6 @@ def main():
     )
     fig_area.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1))
     st.plotly_chart(fig_area, use_container_width=True)
-
-    st.subheader("SYSTEM Score Distribution")
-    fig_system = px.bar(
-        system_scores, x="SYSTEM", y="SCORE",
-        color=system_scores["SCORE"].astype(str),
-        text="SCORE",
-        color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
-        title="Lowest Score per SYSTEM"
-    )
-    fig_system.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1), xaxis=dict(tickangle=-45))
-    st.plotly_chart(fig_system, use_container_width=True)
 
     # ======================
     # 🥧 PIE CHARTS
@@ -136,49 +131,104 @@ def main():
                     fig = px.pie(
                         area_data, names="EQUIP_STATUS", values="COUNT",
                         color="EQUIP_STATUS",
-                        color_discrete_map={"Need Action": "red", "Caution": "yellow", "Okay": "green"},
+                        color_discrete_map={"RED": "red", "AMBER": "yellow", "GREEN": "green"},
                         hole=0.4
                     )
                     fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20))
                     st.plotly_chart(fig, use_container_width=True)
-    
+
     # ======================
-    # 📍 TABLES
+    # SYSTEM Score Distribution
+    # ======================
+    st.subheader("SYSTEM Score Distribution")
+    fig_system = px.bar(
+        system_scores, x="SYSTEM", y="SCORE",
+        color=system_scores["SCORE"].astype(str),
+        text="SCORE",
+        color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
+        title="Lowest Score per SYSTEM"
+    )
+    fig_system.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1), xaxis=dict(tickangle=-45))
+    st.plotly_chart(fig_system, use_container_width=True)
+
+    # ======================
+    # Area Status (table)
     # ======================
     st.subheader("Area Status (Lowest Score)")
     st.dataframe(area_scores.style.applymap(color_score, subset=["SCORE"]), use_container_width=True)
 
-    st.subheader("System Status (Lowest Score)")
-    system_scores["STATUS"] = system_scores["SCORE"].apply(map_status)
-    st.dataframe(system_scores.style.applymap(color_status, subset=["STATUS"]), use_container_width=True)
-    
     # ======================
-    # 🔎 INTERACTIVE EXPLORER
+    # 📍 SYSTEM STATUS EXPLORER (Summary + Drilldown)
     # ======================
-    st.subheader("Explore Equipment by System")
-    selected_system = st.selectbox("Select a System:", sorted(df["SYSTEM"].unique()))
-    if selected_system:
-        filtered_df = df[df["SYSTEM"] == selected_system]
-        
-        display_cols = [
-            "AREA", "SYSTEM", "EQUIPMENT DESCRIPTION", "DATE", "SCORE",
-            "VIBRATION", "OIL ANALYSIS", "TEMPERATURE", "OTHER INSPECTION",
-            "FINDING", "ACTION PLAN"
-        ]
-        # Ensure only existing columns are displayed
-        display_cols = [col for col in display_cols if col in filtered_df.columns]
-        
-        st.dataframe(
-            filtered_df[display_cols].style.applymap(color_score, subset=["SCORE"]),
-            use_container_width=True
-        )
+    st.subheader("System Status Explorer")
+
+    # --- Table 1: System Summary ---
+    system_summary = (
+        df.groupby("SYSTEM")
+        .agg({"SCORE": "min"})
+        .reset_index()
+    )
+    system_summary["STATUS"] = system_summary["SCORE"].apply(map_status)
+
+    gb = GridOptionsBuilder.from_dataframe(system_summary[["SYSTEM", "STATUS", "SCORE"]])
+    gb.configure_selection(selection_mode="single", use_checkbox=False)
+    gb.configure_default_column(resizable=True, filter=True, sortable=True)
+    gridOptions = gb.build()
+
+    grid_response = AgGrid(
+        system_summary,
+        gridOptions=gridOptions,
+        enable_enterprise_modules=True,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        fit_columns_on_grid_load=True,
+        height=300
+    )
+
+    # --- Table 2: Equipment Details (only if a system clicked) ---
+    selected = grid_response.get("selected_rows", [])
+
+    # normalize selected_rows to a list of dicts (some st-aggrid versions return a DataFrame)
+    if isinstance(selected, pd.DataFrame):
+        selected = selected.to_dict("records")
+    elif selected is None:
+        selected = []
+    elif isinstance(selected, dict):
+        selected = [selected]
+    # else if already a list, keep it
+
+    if len(selected) > 0:
+        # robustly get SYSTEM value
+        selected_row = selected[0]
+        selected_system = selected_row.get("SYSTEM") or selected_row.get("system") or selected_row.get("System")
+
+        if selected_system:
+            st.markdown(f"### Equipment Details for **{selected_system}**")
+
+            detail_df = df[df["SYSTEM"] == selected_system].copy()
+            detail_df["DATE"] = detail_df["DATE"].dt.strftime('%d-%m-%Y')
+            detail_df["STATUS"] = detail_df["SCORE"].apply(map_status)
+
+            display_cols = [
+                "EQUIPMENT DESCRIPTION", "DATE", "SCORE", "STATUS",
+                "VIBRATION", "OIL ANALYSIS", "TEMPERATURE",
+                "OTHER INSPECTION", "FINDING", "ACTION PLAN"
+            ]
+            display_cols = [c for c in display_cols if c in detail_df.columns]
+
+            st.dataframe(
+                detail_df[display_cols].style.map(color_score, subset=["SCORE"]).hide(axis="index"),
+                use_container_width=True
+            )
+        else:
+            st.info("Selected row does not contain a SYSTEM value.")
+    else:
+        st.info("Click a system above to see equipment details here.")
 
     # ======================
     # 📈 PERFORMANCE TREND
     # ======================
     st.subheader("System Performance Trend Over Time")
     trend_df = df.groupby(['DATE', 'SYSTEM'])['SCORE'].min().reset_index()
-    
     trend_systems = sorted(df["SYSTEM"].unique())
     if trend_systems:
         selected_system_trend = st.selectbox("Select System for Trend Line:", trend_systems)
