@@ -10,12 +10,12 @@ from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode, DataRe
 def map_status(score):
     """Converts a numeric score (1, 2, 3) to a text status."""
     if score == 1:
-        return "RED"
+        return "Need Action"
     elif score == 2:
-        return "AMBER"
+        return "Caution"
     elif score == 3:
         return "GREEN"
-    return "UNKNOWN"
+    return "Okay"
 
 def color_score(val):
     """Returns CSS style for SCORE cells (used in pandas Styler)."""
@@ -35,11 +35,11 @@ def color_score(val):
 
 def color_status(val):
     """Returns CSS style for STATUS cells (used in pandas Styler)."""
-    if val == "RED":
+    if val == "Need Action":
         return "background-color: red; color: white;"
-    elif val == "AMBER":
+    elif val == "Caution":
         return "background-color: orange; color: black;"
-    elif val == "GREEN":
+    elif val == "Okay":
         return "background-color: green; color: white;"
     return ""
 
@@ -137,10 +137,10 @@ def main():
                     fig = px.pie(
                         area_data, names="EQUIP_STATUS", values="COUNT",
                         color="EQUIP_STATUS",
-                        color_discrete_map={"RED": "red", "AMBER": "yellow", "GREEN": "green"},
+                        color_discrete_map={"Need Action": "red", "Caution": "yellow", "Okay": "green"},
                         hole=0.4,
                         # *** UPDATED: Enforce slice and legend order ***
-                        category_orders={"EQUIP_STATUS": ["GREEN", "AMBER", "RED"]}
+                        category_orders={"EQUIP_STATUS": ["Okay", "Caution", "Need Action"]}
                     )
                     # *** UPDATED: Add count labels to slices ***
                     fig.update_traces(textinfo='value', textfont_size=16)
@@ -186,8 +186,28 @@ def main():
     gb.configure_selection(selection_mode="single", use_checkbox=False)
     gb.configure_selection(rowMultiSelectWithClick=False, suppressRowClickSelection=False)
     gb.configure_default_column(resizable=False, filter=True, sortable=True)
-    gridOptions = gb.build()
     
+
+    # ✅ Add color grading for STATUS column
+    cell_style_jscode = JsCode("""
+    function(params) {
+        if (params.value == 'Okay') {
+            return { 'color': 'white', 'backgroundColor': 'green', 'fontWeight': 'bold', 'textAlign': 'center' };
+        } else if (params.value == 'Caution') {
+            return { 'color': 'black', 'backgroundColor': 'yellow', 'fontWeight': 'bold', 'textAlign': 'center' };
+        } else if (params.value == 'Need Action') {
+            return { 'color': 'white', 'backgroundColor': 'red', 'fontWeight': 'bold', 'textAlign': 'center' };
+        }
+        return null;
+    }
+    """)
+    # Make STATUS and SCORE columns narrower
+    gb.configure_column("STATUS", width=120)   # adjust number as needed
+    gb.configure_column("SCORE", width=90)     # adjust number as needed
+
+    gb.configure_column("STATUS", cellStyle=cell_style_jscode)
+    
+    gridOptions = gb.build()
     gridOptions['suppressMovableColumns'] = True
 
     grid_response = AgGrid(
@@ -238,9 +258,9 @@ def main():
             # Add cell styling for the 'STATUS' column based on text
             cell_style_jscode = JsCode("""
             function(params) {
-                if (params.value == 'RED') { return {'backgroundColor': 'red', 'color': 'white'}; }
-                if (params.value == 'AMBER') { return {'backgroundColor': 'orange', 'color': 'black'}; }
-                if (params.value == 'GREEN') { return {'backgroundColor': 'green', 'color': 'white'}; }
+                if (params.value == 'Need Action') { return {'backgroundColor': 'red', 'color': 'white'}; }
+                if (params.value == 'Caution') { return {'backgroundColor': 'orange', 'color': 'black'}; }
+                if (params.value == 'Okay') { return {'backgroundColor': 'green', 'color': 'white'}; }
                 return null;
             }
             """)
