@@ -38,7 +38,7 @@ def color_status(val):
     if val == "Need Action":
         return "background-color: red; color: white;"
     elif val == "Caution":
-        return "background-color: orange; color: black;"
+        return "background-color: yellow; color: black;"
     elif val == "Okay":
         return "background-color: green; color: white;"
     return ""
@@ -260,7 +260,7 @@ def main():
             cell_style_jscode = JsCode("""
             function(params) {
                 if (params.value == 'Need Action') { return {'backgroundColor': 'red', 'color': 'white'}; }
-                if (params.value == 'Caution') { return {'backgroundColor': 'orange', 'color': 'black'}; }
+                if (params.value == 'Caution') { return {'backgroundColor': 'yellow', 'color': 'black'}; }
                 if (params.value == 'Okay') { return {'backgroundColor': 'green', 'color': 'white'}; }
                 return null;
             }
