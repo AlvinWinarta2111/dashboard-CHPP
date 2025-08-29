@@ -14,8 +14,8 @@ def map_status(score):
     elif score == 2:
         return "Caution"
     elif score == 3:
-        return "GREEN"
-    return "Okay"
+        return "Okay"
+    return "UNKNOWN"
 
 def color_score(val):
     """Returns CSS style for SCORE cells (used in pandas Styler)."""
@@ -218,6 +218,7 @@ def main():
         fit_columns_on_grid_load=True,
         height=300,
         theme="streamlit"
+        allow_unsafe_jscode=True
     )
 
     # --- Table 2: Equipment Details (only if a system is clicked) ---
