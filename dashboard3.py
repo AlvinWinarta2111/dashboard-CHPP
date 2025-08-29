@@ -110,7 +110,9 @@ def main():
         color=area_scores["SCORE"].astype(str),
         text="SCORE",
         color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
-        title="Lowest Score per AREA"
+        title="Lowest Score per AREA",
+        # *** UPDATED: Enforce legend order ***
+        category_orders={"SCORE": ["3", "2", "1"]}
     )
     fig_area.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1))
     st.plotly_chart(fig_area, use_container_width=True)
@@ -136,8 +138,12 @@ def main():
                         area_data, names="EQUIP_STATUS", values="COUNT",
                         color="EQUIP_STATUS",
                         color_discrete_map={"RED": "red", "AMBER": "yellow", "GREEN": "green"},
-                        hole=0.4
+                        hole=0.4,
+                        # *** UPDATED: Enforce slice and legend order ***
+                        category_orders={"EQUIP_STATUS": ["GREEN", "AMBER", "RED"]}
                     )
+                    # *** UPDATED: Add count labels to slices ***
+                    fig.update_traces(textinfo='value', textfont_size=16)
                     fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20))
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -150,7 +156,9 @@ def main():
         color=system_scores["SCORE"].astype(str),
         text="SCORE",
         color_discrete_map={"3": "green", "2": "yellow", "1": "red"},
-        title="Lowest Score per SYSTEM"
+        title="Lowest Score per SYSTEM",
+        # *** UPDATED: Enforce legend order ***
+        category_orders={"SCORE": ["3", "2", "1"]}
     )
     fig_system.update_layout(yaxis=dict(title="Score", range=[0, 3.5], dtick=1), xaxis=dict(tickangle=-45))
     st.plotly_chart(fig_system, use_container_width=True)
@@ -180,7 +188,6 @@ def main():
     gb.configure_default_column(resizable=False, filter=True, sortable=True)
     gridOptions = gb.build()
     
-    # *** UPDATED: Prevent columns from being moved ***
     gridOptions['suppressMovableColumns'] = True
 
     grid_response = AgGrid(
@@ -246,7 +253,6 @@ def main():
             
             gridOptions_details = gb_details.build()
 
-            # *** UPDATED: Prevent columns from being moved ***
             gridOptions_details['suppressMovableColumns'] = True
 
             # Calculate dynamic height for the table
@@ -279,7 +285,6 @@ def main():
                     trend_df_filtered, x="DATE", y="SCORE", markers=True,
                     title=f"Performance Trend for {selected_system}"
                 )
-                # *** UPDATED: Format x-axis and fix range to prevent panning ***
                 fig_trend.update_xaxes(tickformat="%d/%m/%y", fixedrange=True)
                 fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1, fixedrange=True))
                 st.plotly_chart(fig_trend, use_container_width=True)
