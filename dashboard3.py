@@ -143,7 +143,7 @@ def main():
                         category_orders={"EQUIP_STATUS": ["Okay", "Caution", "Need Action"]}
                     )
                     # *** UPDATED: Add count labels to slices ***
-                    fig.update_traces(textinfo='value', textfont_size=16)
+                    fig.update_traces(textinfo='percent+value', textfont_size=16)
                     fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20))
                     st.plotly_chart(fig, use_container_width=True)
 
