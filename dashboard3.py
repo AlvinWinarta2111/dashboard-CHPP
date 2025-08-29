@@ -217,7 +217,7 @@ def main():
         update_mode=GridUpdateMode.SELECTION_CHANGED,
         fit_columns_on_grid_load=True,
         height=300,
-        theme="streamlit"
+        theme="streamlit",
         allow_unsafe_jscode=True
     )
 
