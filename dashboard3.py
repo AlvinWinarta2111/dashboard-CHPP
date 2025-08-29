@@ -177,8 +177,11 @@ def main():
     gb = GridOptionsBuilder.from_dataframe(system_summary[["SYSTEM", "STATUS", "SCORE"]])
     gb.configure_selection(selection_mode="single", use_checkbox=False)
     gb.configure_selection(rowMultiSelectWithClick=False, suppressRowClickSelection=False)
-    gb.configure_default_column(resizable=True, filter=True, sortable=True)
+    gb.configure_default_column(resizable=False, filter=True, sortable=True)
     gridOptions = gb.build()
+    
+    # *** UPDATED: Prevent columns from being moved ***
+    gridOptions['suppressMovableColumns'] = True
 
     grid_response = AgGrid(
         system_summary,
@@ -213,46 +216,52 @@ def main():
             detail_df["STATUS"] = detail_df["SCORE"].apply(map_status)
 
             display_cols = [
-                "EQUIPMENT DESCRIPTION", "DATE", "SCORE", "STATUS",
-                "VIBRATION", "OIL ANALYSIS", "TEMPERATURE",
-                "OTHER INSPECTION", "FINDING", "ACTION PLAN"
+                "EQUIPMENT DESCRIPTION", "DATE", "SCORE",
+                "VIBRATION", "OIL ANALYSIS", "TEMPERATURE", "OTHER INSPECTION", "STATUS",
+                "FINDING", "ACTION PLAN"
             ]
             display_cols = [c for c in display_cols if c in detail_df.columns]
 
-            # *** NEW LOGIC: Use AgGrid for Equipment Details Table ***
             gb_details = GridOptionsBuilder.from_dataframe(detail_df[display_cols])
             
-            # Configure selection to highlight the full row
             gb_details.configure_selection(selection_mode="single", use_checkbox=False, rowMultiSelectWithClick=False, suppressRowClickSelection=False)
+            
+            gb_details.configure_default_column(resizable=False)
 
-            # Add cell styling for the 'SCORE' column using JsCode
+            # Add cell styling for the 'STATUS' column based on text
             cell_style_jscode = JsCode("""
             function(params) {
-                if (params.value == 1) {
-                    return {'backgroundColor': 'red', 'color': 'white'};
-                }
-                if (params.value == 2) {
-                    return {'backgroundColor': 'yellow', 'color': 'black'};
-                }
-                if (params.value == 3) {
-                    return {'backgroundColor': 'green', 'color': 'white'};
-                }
+                if (params.value == 'RED') { return {'backgroundColor': 'red', 'color': 'white'}; }
+                if (params.value == 'AMBER') { return {'backgroundColor': 'orange', 'color': 'black'}; }
+                if (params.value == 'GREEN') { return {'backgroundColor': 'green', 'color': 'white'}; }
                 return null;
             }
             """)
-            gb_details.configure_column("SCORE", cellStyle=cell_style_jscode)
+            gb_details.configure_column("STATUS", cellStyle=cell_style_jscode)
+            
+            # Configure column widths and text wrapping
+            gb_details.configure_column("EQUIPMENT DESCRIPTION", width=350)
+            gb_details.configure_column("FINDING", width=400, wrapText=True, autoHeight=True)
+            gb_details.configure_column("ACTION PLAN", width=400, wrapText=True, autoHeight=True)
             
             gridOptions_details = gb_details.build()
+
+            # *** UPDATED: Prevent columns from being moved ***
+            gridOptions_details['suppressMovableColumns'] = True
+
+            # Calculate dynamic height for the table
+            num_rows = len(detail_df)
+            table_height = 100 + (num_rows * 35) 
+            if num_rows > 10: # Cap the height to avoid excessive length
+                table_height = 450
 
             AgGrid(
                 detail_df[display_cols],
                 gridOptions=gridOptions_details,
-                fit_columns_on_grid_load=True,
-                height=400,
+                height=table_height,
                 theme="streamlit",
                 allow_unsafe_jscode=True
             )
-            # *** END OF NEW LOGIC ***
 
             # ======================
             # 📈 PERFORMANCE TREND (NOW LINKED TO SELECTION)
@@ -270,7 +279,9 @@ def main():
                     trend_df_filtered, x="DATE", y="SCORE", markers=True,
                     title=f"Performance Trend for {selected_system}"
                 )
-                fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1))
+                # *** UPDATED: Format x-axis and fix range to prevent panning ***
+                fig_trend.update_xaxes(tickformat="%d/%m/%y", fixedrange=True)
+                fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1, fixedrange=True))
                 st.plotly_chart(fig_trend, use_container_width=True)
             else:
                 st.warning(f"No trend data available for {selected_system} in the selected date range.")
