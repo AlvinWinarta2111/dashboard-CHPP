@@ -89,14 +89,16 @@ def main():
     min_date, max_date = df["DATE"].min().date(), df["DATE"].max().date()
     date_range = st.date_input("Select Date Range", [min_date, max_date])
     if len(date_range) == 2:
-        df = df[(df["DATE"].dt.date >= date_range[0]) & (df["DATE"].dt.date <= date_range[1])]
+        df_filtered_by_date = df[(df["DATE"].dt.date >= date_range[0]) & (df["DATE"].dt.date <= date_range[1])]
+    else:
+        df_filtered_by_date = df # Default to all data if range is incomplete
 
-    if df.empty:
+    if df_filtered_by_date.empty:
         st.warning("No data available for the selected date range.")
         return
 
     # --- Aggregation ---
-    system_scores = df.groupby(["AREA", "SYSTEM"])["SCORE"].min().reset_index()
+    system_scores = df_filtered_by_date.groupby(["AREA", "SYSTEM"])["SCORE"].min().reset_index()
     area_scores = system_scores.groupby("AREA")["SCORE"].min().reset_index()
 
     # ======================
@@ -117,7 +119,9 @@ def main():
     # 🥧 PIE CHARTS
     # ======================
     st.subheader("Equipment Status Distribution per AREA")
-    area_dist = df.groupby(["AREA", "EQUIP_STATUS"])["EQUIPMENT DESCRIPTION"].count().reset_index(name="COUNT")
+    # Use the latest status for the pie charts within the date range
+    latest_for_pie = df_filtered_by_date.sort_values("DATE").groupby("EQUIPMENT DESCRIPTION", as_index=False).last()
+    area_dist = latest_for_pie.groupby(["AREA", "EQUIP_STATUS"])["EQUIPMENT DESCRIPTION"].count().reset_index(name="COUNT")
     areas = sorted(area_dist["AREA"].unique())
 
     cols_per_row = 3
@@ -155,7 +159,7 @@ def main():
     # Area Status (table)
     # ======================
     st.subheader("Area Status (Lowest Score)")
-    st.dataframe(area_scores.style.applymap(color_score, subset=["SCORE"]), use_container_width=True)
+    st.dataframe(area_scores.style.map(color_score, subset=["SCORE"]).hide(axis="index"))
 
     # ======================
     # 📍 SYSTEM STATUS EXPLORER (Summary + Drilldown)
@@ -164,7 +168,7 @@ def main():
 
     # --- Table 1: System Summary ---
     system_summary = (
-        df.groupby("SYSTEM")
+        df_filtered_by_date.groupby("SYSTEM")
         .agg({"SCORE": "min"})
         .reset_index()
     )
@@ -172,6 +176,7 @@ def main():
 
     gb = GridOptionsBuilder.from_dataframe(system_summary[["SYSTEM", "STATUS", "SCORE"]])
     gb.configure_selection(selection_mode="single", use_checkbox=False)
+    gb.configure_selection(rowMultiSelectWithClick=False, suppressRowClickSelection=False)
     gb.configure_default_column(resizable=True, filter=True, sortable=True)
     gridOptions = gb.build()
 
@@ -181,30 +186,29 @@ def main():
         enable_enterprise_modules=True,
         update_mode=GridUpdateMode.SELECTION_CHANGED,
         fit_columns_on_grid_load=True,
-        height=300
+        height=300,
+        theme="streamlit"
     )
 
-    # --- Table 2: Equipment Details (only if a system clicked) ---
+    # --- Table 2: Equipment Details (only if a system is clicked) ---
     selected = grid_response.get("selected_rows", [])
 
-    # normalize selected_rows to a list of dicts (some st-aggrid versions return a DataFrame)
     if isinstance(selected, pd.DataFrame):
         selected = selected.to_dict("records")
-    elif selected is None:
-        selected = []
-    elif isinstance(selected, dict):
-        selected = [selected]
-    # else if already a list, keep it
-
-    if len(selected) > 0:
-        # robustly get SYSTEM value
-        selected_row = selected[0]
-        selected_system = selected_row.get("SYSTEM") or selected_row.get("system") or selected_row.get("System")
+    
+    if selected:
+        selected_system = selected[0].get("SYSTEM")
 
         if selected_system:
-            st.markdown(f"### Equipment Details for **{selected_system}**")
+            st.markdown(f"### Equipment Details for **{selected_system}** (Latest Status in Range)")
 
-            detail_df = df[df["SYSTEM"] == selected_system].copy()
+            # Filter the date-ranged data for the selected system
+            detail_df = df_filtered_by_date[df_filtered_by_date["SYSTEM"] == selected_system].copy()
+            
+            # Find the latest record for each piece of equipment within that system
+            detail_df = detail_df.sort_values(by="DATE", ascending=False)
+            detail_df = detail_df.drop_duplicates(subset=["EQUIPMENT DESCRIPTION"], keep="first")
+
             detail_df["DATE"] = detail_df["DATE"].dt.strftime('%d-%m-%Y')
             detail_df["STATUS"] = detail_df["SCORE"].apply(map_status)
 
@@ -215,31 +219,64 @@ def main():
             ]
             display_cols = [c for c in display_cols if c in detail_df.columns]
 
-            st.dataframe(
-                detail_df[display_cols].style.map(color_score, subset=["SCORE"]).hide(axis="index"),
-                use_container_width=True
+            # *** NEW LOGIC: Use AgGrid for Equipment Details Table ***
+            gb_details = GridOptionsBuilder.from_dataframe(detail_df[display_cols])
+            
+            # Configure selection to highlight the full row
+            gb_details.configure_selection(selection_mode="single", use_checkbox=False, rowMultiSelectWithClick=False, suppressRowClickSelection=False)
+
+            # Add cell styling for the 'SCORE' column using JsCode
+            cell_style_jscode = JsCode("""
+            function(params) {
+                if (params.value == 1) {
+                    return {'backgroundColor': 'red', 'color': 'white'};
+                }
+                if (params.value == 2) {
+                    return {'backgroundColor': 'yellow', 'color': 'black'};
+                }
+                if (params.value == 3) {
+                    return {'backgroundColor': 'green', 'color': 'white'};
+                }
+                return null;
+            }
+            """)
+            gb_details.configure_column("SCORE", cellStyle=cell_style_jscode)
+            
+            gridOptions_details = gb_details.build()
+
+            AgGrid(
+                detail_df[display_cols],
+                gridOptions=gridOptions_details,
+                fit_columns_on_grid_load=True,
+                height=400,
+                theme="streamlit",
+                allow_unsafe_jscode=True
             )
-        else:
-            st.info("Selected row does not contain a SYSTEM value.")
+            # *** END OF NEW LOGIC ***
+
+            # ======================
+            # 📈 PERFORMANCE TREND (NOW LINKED TO SELECTION)
+            # ======================
+            st.subheader(f"Performance Trend for {selected_system}")
+            
+            # Use the date-filtered dataframe for the trend
+            trend_df = df_filtered_by_date.groupby(['DATE', 'SYSTEM'])['SCORE'].min().reset_index()
+            
+            # Filter the trend data for the selected system from the AgGrid table
+            trend_df_filtered = trend_df[trend_df["SYSTEM"] == selected_system]
+
+            if not trend_df_filtered.empty:
+                fig_trend = px.line(
+                    trend_df_filtered, x="DATE", y="SCORE", markers=True,
+                    title=f"Performance Trend for {selected_system}"
+                )
+                fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1))
+                st.plotly_chart(fig_trend, use_container_width=True)
+            else:
+                st.warning(f"No trend data available for {selected_system} in the selected date range.")
+
     else:
-        st.info("Click a system above to see equipment details here.")
-
-    # ======================
-    # 📈 PERFORMANCE TREND
-    # ======================
-    st.subheader("System Performance Trend Over Time")
-    trend_df = df.groupby(['DATE', 'SYSTEM'])['SCORE'].min().reset_index()
-    trend_systems = sorted(df["SYSTEM"].unique())
-    if trend_systems:
-        selected_system_trend = st.selectbox("Select System for Trend Line:", trend_systems)
-        trend_df_filtered = trend_df[trend_df["SYSTEM"] == selected_system_trend]
-
-        fig_trend = px.line(
-            trend_df_filtered, x="DATE", y="SCORE", markers=True,
-            title=f"Performance Trend for {selected_system_trend}"
-        )
-        fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1))
-        st.plotly_chart(fig_trend, use_container_width=True)
+        st.info("Click a system above to see its latest equipment details and performance trend.")
 
 
 if __name__ == "__main__":
