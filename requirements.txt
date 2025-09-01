@@ -3,3 +3,4 @@ pandas
 openpyxl
 plotly
 streamlit-aggrid
+streamlit_plotly_events
