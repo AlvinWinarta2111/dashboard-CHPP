@@ -337,8 +337,6 @@ def main():
                 else:
                     st.warning(f"No trend data available for {selected_equipment_name} in the selected date range.")
                 
-                else:
-                    st.warning(f"No trend data available for {selected_equipment_name} in the selected date range.")
             else:
                 st.info("Select a piece of equipment from the table above to see its performance trend.")
     else:
