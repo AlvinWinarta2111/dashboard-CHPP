@@ -301,6 +301,11 @@ def main():
             # --- Performance Trend ---
             selected_equipment = grid_response_details.get("selected_rows", [])
             
+            # Reset session state for the trend details if the equipment selection changes
+            if selected_equipment and st.session_state.selected_equipment_name != selected_equipment[0].get("EQUIPMENT DESCRIPTION"):
+                st.session_state.clicked_point_index = None
+                st.session_state.selected_equipment_name = selected_equipment[0].get("EQUIPMENT DESCRIPTION")
+            
             if selected_equipment:
                 # Filter data for the selected equipment
                 selected_equipment_name = selected_equipment[0].get("EQUIPMENT DESCRIPTION")
@@ -322,15 +327,11 @@ def main():
                         click_event=True,
                         key=f"trend_chart_{selected_equipment_name}"
                     )
-
-                    # Update session state with the clicked point
-                    if selected_points:
-                        st.session_state.clicked_point_index = selected_points[0]['pointIndex']
-                        st.session_state.selected_equipment_name = selected_equipment_name
                     
-                    # --- Details Section based on Session State ---
-                    if st.session_state.clicked_point_index is not None and st.session_state.selected_equipment_name == selected_equipment_name:
-                        selected_row = trend_df.iloc[st.session_state.clicked_point_index]
+                    # --- Details Section based on clicked point ---
+                    if selected_points:
+                        point_index = selected_points[0]['pointIndex']
+                        selected_row = trend_df.iloc[point_index]
                         
                         st.subheader(f"Details for {selected_equipment_name} on {selected_row['DATE'].strftime('%d-%m-%Y')}")
                         
