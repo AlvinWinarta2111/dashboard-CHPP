@@ -40,7 +40,7 @@ def color_status(val):
         return "background-color: red; color: white;"
     elif val == "Caution":
         return "background-color: yellow; color: black;"
-    elif val == "Okay":
+    elif val =="Okay":
         return "background-color: green; color: white;"
     return ""
 
@@ -203,8 +203,8 @@ def main():
     }
     """)
     # Make STATUS and SCORE columns narrower
-    gb.configure_column("STATUS", width=120)   # adjust number as needed
-    gb.configure_column("SCORE", width=90)     # adjust number as needed
+    gb.configure_column("STATUS", width=120)    # adjust number as needed
+    gb.configure_column("SCORE", width=90)      # adjust number as needed
 
     gb.configure_column("STATUS", cellStyle=cell_style_jscode)
     
@@ -289,11 +289,11 @@ def main():
                 gridOptions=gridOptions_details,
                 height=table_height,
                 theme="streamlit",
-                update_mode=GridUpdateMode.SELECTION_CHANGED, # THIS IS NEW
+                update_mode=GridUpdateMode.SELECTION_CHANGED,
                 allow_unsafe_jscode=True
             )
 
-             # --- Performance Trend ---
+            # --- Performance Trend ---
             selected_equipment = grid_response_details.get("selected_rows", [])
             
             if selected_equipment:
