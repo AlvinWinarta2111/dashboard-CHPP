@@ -51,6 +51,11 @@ def main():
     st.set_page_config(layout="wide")
     st.title("📊 Condition Monitoring Dashboard")
 
+    if 'clicked_point_index' not in st.session_state:
+        st.session_state.clicked_point_index = None
+    if 'selected_equipment_name' not in st.session_state:
+        st.session_state.selected_equipment_name = None
+
     uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx"])
     if not uploaded_file:
         st.info("Please upload a file to continue.")
@@ -318,10 +323,14 @@ def main():
                         key=f"trend_chart_{selected_equipment_name}"
                     )
 
-                    # --- New: Click-based Details Section ---
+                    # Update session state with the clicked point
                     if selected_points:
-                        point_index = selected_points[0]['pointIndex']
-                        selected_row = trend_df.iloc[point_index]
+                        st.session_state.clicked_point_index = selected_points[0]['pointIndex']
+                        st.session_state.selected_equipment_name = selected_equipment_name
+                    
+                    # --- Details Section based on Session State ---
+                    if st.session_state.clicked_point_index is not None and st.session_state.selected_equipment_name == selected_equipment_name:
+                        selected_row = trend_df.iloc[st.session_state.clicked_point_index]
                         
                         st.subheader(f"Details for {selected_equipment_name} on {selected_row['DATE'].strftime('%d-%m-%Y')}")
                         
