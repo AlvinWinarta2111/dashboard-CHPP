@@ -5,3 +5,4 @@ plotly
 streamlit-aggrid
 streamlit_plotly_events
 plotly_events
+st-aggrid
