@@ -282,36 +282,38 @@ def main():
             if num_rows > 10: # Cap the height to avoid excessive length
                 table_height = 450
 
-            AgGrid(
+            
+            # AgGrid for equipment details
+            grid_response_details = AgGrid(
                 detail_df[display_cols],
                 gridOptions=gridOptions_details,
                 height=table_height,
                 theme="streamlit",
+                update_mode=GridUpdateMode.SELECTION_CHANGED, # THIS IS NEW
                 allow_unsafe_jscode=True
             )
 
-            # ======================
-            # 📈 PERFORMANCE TREND (NOW LINKED TO SELECTION)
-            # ======================
-            st.subheader(f"Performance Trend for {selected_system}")
-            
-            # Use the date-filtered dataframe for the trend
-            trend_df = df_filtered_by_date.groupby(['DATE', 'SYSTEM'])['SCORE'].min().reset_index()
-            
-            # Filter the trend data for the selected system from the AgGrid table
-            trend_df_filtered = trend_df[trend_df["SYSTEM"] == selected_system]
+            # --- Performance Trend ---
+            selected_equipment = grid_response_details.get("selected_rows", [])
+            st.markdown("### Performance Trend (Click an equipment to view its history)")
 
-            if not trend_df_filtered.empty:
-                fig_trend = px.line(
-                    trend_df_filtered, x="DATE", y="SCORE", markers=True,
-                    title=f"Performance Trend for {selected_system}"
-                )
-                fig_trend.update_xaxes(tickformat="%d/%m/%y", fixedrange=True)
-                fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1, fixedrange=True))
-                st.plotly_chart(fig_trend, use_container_width=True)
+            if selected_equipment:
+                # Filter data for the selected equipment
+                selected_equipment_name = selected_equipment[0].get("EQUIPMENT DESCRIPTION")
+                trend_df = df_filtered_by_date[df_filtered_by_date["EQUIPMENT DESCRIPTION"] == selected_equipment_name].copy()
+
+                if not trend_df.empty:
+                    fig_trend = px.line(
+                        trend_df, x="DATE", y="SCORE", markers=True,
+                        title=f"Performance Trend for **{selected_equipment_name}**"
+                    )
+                    fig_trend.update_xaxes(tickformat="%d/%m/%y", fixedrange=True)
+                    fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1, fixedrange=True))
+                    st.plotly_chart(fig_trend, use_container_width=True)
+                else:
+                    st.warning(f"No trend data available for {selected_equipment_name} in the selected date range.")
             else:
-                st.warning(f"No trend data available for {selected_system} in the selected date range.")
-
+                st.info("Select a piece of equipment from the table above to see its performance trend.")
     else:
         st.info("Click a system above to see its latest equipment details and performance trend.")
 
