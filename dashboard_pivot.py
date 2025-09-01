@@ -320,13 +320,8 @@ def main():
 
                     # --- New: Click-based Details Section ---
                     if selected_points:
-                        point_date_str = selected_points[0]['x']
-                        
-                        # Fix: Convert the clicked date string to a datetime object for comparison
-                        clicked_date = pd.to_datetime(point_date_str)
-                        
-                        # Use a tolerant comparison, as the time component might differ slightly
-                        selected_row = trend_df[trend_df["DATE"].dt.date == clicked_date.date()].iloc[0]
+                        point_index = selected_points[0]['pointIndex']
+                        selected_row = trend_df.iloc[point_index]
                         
                         st.subheader(f"Details for {selected_equipment_name} on {selected_row['DATE'].strftime('%d-%m-%Y')}")
                         
