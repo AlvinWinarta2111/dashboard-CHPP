@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode, DataReturnMode
+from streamlit_plotly_events import plotly_events
 
 # =========================
 # Helper functions (for styling and status mapping)
@@ -292,10 +293,9 @@ def main():
                 allow_unsafe_jscode=True
             )
 
-            # --- Performance Trend ---
+             # --- Performance Trend ---
             selected_equipment = grid_response_details.get("selected_rows", [])
-            st.markdown("### Performance Trend (Click an equipment to view its history)")
-
+            
             if selected_equipment:
                 # Filter data for the selected equipment
                 selected_equipment_name = selected_equipment[0].get("EQUIPMENT DESCRIPTION")
@@ -308,39 +308,39 @@ def main():
                     )
                     fig_trend.update_xaxes(tickformat="%d/%m/%y", fixedrange=True)
                     fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1, fixedrange=True))
-                    st.plotly_chart(fig_trend, use_container_width=True)
-
-                    # --- New: Time-based Details Section ---
-                    st.subheader(f"Details for **{selected_equipment_name}**")
                     
-                    # Get all dates for the selected equipment
-                    dates_for_equipment = sorted(trend_df["DATE"].dt.strftime('%d-%m-%Y').unique(), reverse=True)
+                    st.markdown("### Performance Trend (Click a point on the chart)")
                     
-                    # Add a selectbox to choose a date
-                    selected_date_str = st.selectbox(
-                        "Select a specific date:",
-                        options=dates_for_equipment,
-                        key=f"date_selector_{selected_equipment_name}"
+                    # Use plotly_events to capture the click
+                    selected_points = plotly_events(
+                        fig_trend,
+                        click_event=True,
+                        key=f"trend_chart_{selected_equipment_name}"
                     )
-                    
-                    # Filter the original dataframe for the selected date and equipment
-                    if selected_date_str:
-                        # Find the row that matches the selected date
-                        selected_row = trend_df[trend_df["DATE"].dt.strftime('%d-%m-%Y') == selected_date_str].iloc[0]
+
+                    # --- New: Click-based Details Section ---
+                    if selected_points:
+                        point_date_str = selected_points[0]['x']
+                        st.subheader(f"Details for {selected_equipment_name} on {point_date_str}")
+                        
+                        # Filter the original dataframe for the clicked date
+                        selected_row = trend_df[trend_df["DATE"].astype(str) == point_date_str].iloc[0]
                         
                         st.markdown(f"**Date:** {selected_row['DATE'].strftime('%d-%m-%Y')}")
                         st.markdown(f"**Score:** {selected_row['SCORE']}")
                         st.markdown(f"**Status:** {selected_row['EQUIP_STATUS']}")
                         st.markdown(f"**Finding:** {selected_row.get('FINDING', 'N/A')}")
                         st.markdown(f"**Action Plan:** {selected_row.get('ACTION PLAN', 'N/A')}")
+                    else:
+                        st.info("Click a point on the trend chart to see details for that specific date.")
 
                 else:
                     st.warning(f"No trend data available for {selected_equipment_name} in the selected date range.")
-                
             else:
                 st.info("Select a piece of equipment from the table above to see its performance trend.")
+
     else:
-        st.info("Click a system above to see its latest equipment details and performance trend.")
+        st.info("Click a system above to see its latest equipment details.")
 
 
 if __name__ == "__main__":
