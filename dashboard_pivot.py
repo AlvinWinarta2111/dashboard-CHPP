@@ -282,7 +282,6 @@ def main():
             if num_rows > 10: # Cap the height to avoid excessive length
                 table_height = 450
 
-            
             # AgGrid for equipment details
             grid_response_details = AgGrid(
                 detail_df[display_cols],
@@ -310,6 +309,34 @@ def main():
                     fig_trend.update_xaxes(tickformat="%d/%m/%y", fixedrange=True)
                     fig_trend.update_layout(yaxis=dict(title="Score", range=[0.5, 3.5], dtick=1, fixedrange=True))
                     st.plotly_chart(fig_trend, use_container_width=True)
+
+                    # --- New: Time-based Details Section ---
+                    st.subheader(f"Details for **{selected_equipment_name}**")
+                    
+                    # Get all dates for the selected equipment
+                    dates_for_equipment = sorted(trend_df["DATE"].dt.strftime('%d-%m-%Y').unique(), reverse=True)
+                    
+                    # Add a selectbox to choose a date
+                    selected_date_str = st.selectbox(
+                        "Select a specific date:",
+                        options=dates_for_equipment,
+                        key=f"date_selector_{selected_equipment_name}"
+                    )
+                    
+                    # Filter the original dataframe for the selected date and equipment
+                    if selected_date_str:
+                        # Find the row that matches the selected date
+                        selected_row = trend_df[trend_df["DATE"].dt.strftime('%d-%m-%Y') == selected_date_str].iloc[0]
+                        
+                        st.markdown(f"**Date:** {selected_row['DATE'].strftime('%d-%m-%Y')}")
+                        st.markdown(f"**Score:** {selected_row['SCORE']}")
+                        st.markdown(f"**Status:** {selected_row['EQUIP_STATUS']}")
+                        st.markdown(f"**Finding:** {selected_row.get('FINDING', 'N/A')}")
+                        st.markdown(f"**Action Plan:** {selected_row.get('ACTION PLAN', 'N/A')}")
+
+                else:
+                    st.warning(f"No trend data available for {selected_equipment_name} in the selected date range.")
+                
                 else:
                     st.warning(f"No trend data available for {selected_equipment_name} in the selected date range.")
             else:
